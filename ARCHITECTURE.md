@@ -26,6 +26,7 @@ The architecture should support:
 | Layer | Technology | Responsibility |
 |---|---|---|
 | Frontend | React | User interface and user interactions |
+| Styling | Tailwind CSS v4 | Utility-first styling with CSS-first `@theme` design tokens |
 | Backend runtime | Node.js | Execute backend application logic |
 | HTTP server | Express.js | API routing and middleware |
 | Database | MongoDB | Persist application data |
@@ -97,32 +98,137 @@ Its responsibilities include:
 
 The frontend must not be the authority for sensitive operations such as calculating official scores, determining permissions, or deciding whether a quiz session is open.
 
-### Suggested organization
-
-Adapt this structure to the existing frontend:
+### Implemented organization
 
     client/
     └── src/
-        ├── components/
-        ├── pages/
-        ├── hooks/
-        ├── services/
-        ├── sockets/
-        ├── state/
-        ├── utils/
-        └── App.jsx
+        ├── ui/
+        │   ├── shared/          ← small reusable primitives (Button, Input, Badge, Spinner)
+        │   │   └── index.js     (barrel export)
+        │   └── components/      ← composed feature-level components (Navbar, Modal, Sidebar …)
+        │       └── index.js     (barrel export)
+        │
+        ├── pages/               ← page-level views (one file per route)
+        │   └── index.js
+        │
+        ├── hooks/               ← custom React hooks (useLocalStorage, …)
+        │   └── index.js
+        │
+        ├── services/            ← HTTP API clients and domain service functions
+        │   ├── http.js          (fetch wrapper with auth token injection)
+        │   └── index.js
+        │
+        ├── sockets/             ← Socket.IO connection singleton and event helpers
+        │   ├── socketClient.js
+        │   └── index.js
+        │
+        ├── state/               ← global application state (Zustand / Redux Toolkit / Jotai)
+        │   └── index.js
+        │
+        ├── utils/               ← pure helper functions (cn, formatDate, capitalize, …)
+        │   └── index.js
+        │
+        ├── assets/              ← static images, SVGs, and fonts
+        ├── index.css            ← Tailwind entry point + global base styles
+        ├── App.jsx
+        └── main.jsx
+
+#### Path alias
+
+All imports inside `src/` use the `@/` alias (configured in `vite.config.js`):
+
+```js
+import { Button, Input } from '@/ui/shared'
+import { http }          from '@/services'
+import { useLocalStorage } from '@/hooks'
+```
+
+This avoids fragile relative paths and makes refactoring directories trivial.
+
+#### `ui/shared` vs `ui/components`
+
+| Folder | Purpose | Examples |
+|---|---|---|
+| `ui/shared/` | Atomic primitives — no business logic | `Button`, `Input`, `Badge`, `Spinner` |
+| `ui/components/` | Composed feature components | `Navbar`, `Modal`, `QuizCard`, `Sidebar` |
+
+Shared primitives should accept `variant`, `size`, and `className` props and delegate all layout concerns to the parent.
 
 Responsibilities:
 
-- `components/`: Reusable UI components.
-- `pages/`: Page-level views.
+- `ui/shared/`: Reusable UI primitives.
+- `ui/components/`: Larger, composed components that may consume shared primitives.
+- `pages/`: Page-level views mounted by the router.
 - `hooks/`: Reusable React hooks.
 - `services/`: HTTP API client and frontend service functions.
 - `sockets/`: Real-time connection and event handling.
-- `state/`: Shared application state, if needed.
-- `utils/`: Small reusable utilities.
+- `state/`: Shared application state.
+- `utils/`: Small reusable pure utilities.
 
 Do not create every directory in advance if the application does not need it yet.
+
+## 5b. Styling
+
+The project uses **Tailwind CSS v4** with its CSS-first configuration approach — there is no `tailwind.config.js` file.
+
+### Setup
+
+Tailwind is processed by the `@tailwindcss/vite` Vite plugin registered in `vite.config.js`. The entry point is `src/index.css`:
+
+```css
+@import "tailwindcss";
+
+@theme {
+  --color-accent: #aa3bff;
+  --font-sans:    system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* … */
+}
+```
+
+### Design tokens via `@theme`
+
+All design tokens (colours, fonts, shadows) are declared as CSS custom properties inside `@theme {}`. Tailwind automatically generates utility classes from them:
+
+| Token | Generated utility class |
+|---|---|
+| `--color-accent` | `text-accent`, `bg-accent`, `border-accent` |
+| `--color-bg` | `bg-bg` |
+| `--color-text-h` | `text-text-h` |
+| `--font-mono` | `font-mono` |
+| `--shadow-card` | `shadow-card` |
+
+### Dark mode
+
+Dark-mode token overrides live inside `@media (prefers-color-scheme: dark) { @theme { … } }` in `index.css`. No extra configuration is needed.
+
+### Using Tailwind in components
+
+Use Tailwind utility classes directly in JSX. Combine with the `cn()` helper from `@/utils` when conditional classes are needed:
+
+```jsx
+import { cn } from '@/utils'
+
+function Card({ isActive, className }) {
+  return (
+    <div className={cn('rounded-lg p-4 bg-bg shadow-card', isActive && 'border border-accent', className)}>
+      …
+    </div>
+  )
+}
+```
+
+### Shared primitive styling
+
+Shared primitives in `ui/shared/` declare their own variant classes as string maps and let parents control layout via `className` passthrough:
+
+```jsx
+// Button.jsx
+const variantClasses = {
+  primary: 'bg-accent text-white hover:opacity-90',
+  ghost:   'bg-transparent border border-border',
+}
+```
+
 
 ## 6. Backend Architecture
 
